@@ -327,7 +327,7 @@ pre { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: clamp(0.
 <div class="controls">
   <button onclick="goTo(0)" title="First slide">⏮</button>
   <button onclick="prev()" title="Previous">←</button>
-  <span id="slideCounter">1 / 42</span>
+  <span id="slideCounter">1 / 50</span>
   <button onclick="next()" title="Next">→</button>
   <button onclick="goTo(slides.length-1)" title="Last slide">⏭</button>
   <button onclick="toggleNotes()" title="Toggle notes (N)">📝</button>
@@ -479,6 +479,12 @@ const slides = [
   </div>`
 },
 
+// ===== Section: Attack 1 =====
+{
+  notes: "",
+  html: `<div class="full center"><h1 class="red" style="font-size:clamp(2rem,4vw,3.5rem);">Attack 1</h1><p class="dim" style="font-size:clamp(1rem,1.5vw,1.3rem);">Silent Tool Injection</p></div>`
+},
+
 // ===== Attack 1 - The Setup =====
 {
   notes: "'Attack one. You install an MCP server. You review the tools it offers - read_weather, get_forecast. Looks fine. You approve it. A week later, the server pushes an update. New tools appear: read_filesystem, send_email, query_database. Your client picks them up automatically. No re-consent. No notification. The tool definitions aren't signed, aren't pinned, aren't versioned. The server can change what it is after you said yes.'",
@@ -523,6 +529,12 @@ const slides = [
     <img src="img/approved-vs-running.png" alt="Two permissions approved vs six permissions running" style="max-height:55vh; max-width:85%; object-fit:contain; border-radius:12px;">
     <p class="dim" style="font-size:clamp(0.85rem,1.2vw,1rem); margin-top:1vh;">The LLM will call whatever tools exist. The user never re-consented.</p>
   </div>`
+},
+
+// ===== Section: Attack 2 =====
+{
+  notes: "",
+  html: `<div class="full center"><h1 class="red" style="font-size:clamp(2rem,4vw,3.5rem);">Attack 2</h1><p class="dim" style="font-size:clamp(1rem,1.5vw,1.3rem);">Malicious Elicitation</p></div>`
 },
 
 // ===== SLIDE 20: Attack 2 - The Setup =====
@@ -574,6 +586,12 @@ const slides = [
       <p class="dim mt-1" style="font-size:0.9rem;">Phishing with perfect credibility.</p>
     </div>
   </div>`
+},
+
+// ===== Section: Attack 3 =====
+{
+  notes: "",
+  html: `<div class="full center"><h1 class="red" style="font-size:clamp(2rem,4vw,3.5rem);">Attack 3</h1><p class="dim" style="font-size:clamp(1rem,1.5vw,1.3rem);">Uncontrolled Delegation</p></div>`
 },
 
 // ===== Attack 3 — Build 1: The Cat in the Hat =====
@@ -725,6 +743,12 @@ const slides = [
   </div>`
 },
 
+// ===== Section: Attack 4 =====
+{
+  notes: "",
+  html: `<div class="full center"><h1 class="red" style="font-size:clamp(2rem,4vw,3.5rem);">Attack 4</h1><p class="dim" style="font-size:clamp(1rem,1.5vw,1.3rem);">Sampling Exfiltration</p></div>`
+},
+
 // ===== Attack 4 — The OAuth Flow =====
 {
   notes: "'Attack four. This is the one that keeps me up at night. Let's start with something familiar - the OAuth consent flow. User clicks connect. Authorization server presents a consent screen. User approves. Token is issued. Server connects. Standard OAuth 2.1 with PKCE. Everything by the book.'",
@@ -813,6 +837,12 @@ const slides = [
   </div>`
 },
 
+// ===== Section: Recommendation 1 =====
+{
+  notes: "",
+  html: `<div class="full center"><h1 class="green" style="font-size:clamp(2rem,4vw,3.5rem);">Recommendation 1</h1><p class="dim" style="font-size:clamp(1rem,1.5vw,1.3rem);">One-Way Flow</p></div>`
+},
+
 // ===== Rec 1: One-Way Flow =====
 {
   notes: "'Number one. And I want you to sit with this for a second.'",
@@ -870,6 +900,12 @@ const slides = [
   </div>`
 },
 
+// ===== Section: Recommendation 2 =====
+{
+  notes: "",
+  html: `<div class="full center"><h1 class="green" style="font-size:clamp(2rem,4vw,3.5rem);">Recommendation 2</h1><p class="dim" style="font-size:clamp(1rem,1.5vw,1.3rem);">Signed Server Metadata</p></div>`
+},
+
 // ===== Rec 2: Signed Server Metadata =====
 {
   notes: "'Recommendation two. Signed server metadata. CIMD gave us client identity - the host can verify who's connecting. We need the same thing for servers. Signed manifests that pin tool definitions, versions, and publisher identity. If a tool set changes, the client knows. If a server claims to be a weather service but exposes 80 tools including delete_repository, the signature doesn't match the manifest. This is how you stop attack one - the supply chain attack. The malicious server can't hide what it really is.'",
@@ -923,6 +959,12 @@ const slides = [
     </div>
     <p class="dim" style="font-size:clamp(0.75rem,1vw,0.9rem); margin-top:1vh;">Client pins on connect · Rejects unsigned <code style="background:var(--code-bg); padding:2px 6px; border-radius:4px;">toolsListChanged</code></p>
   </div>`
+},
+
+// ===== Section: Recommendation 3 =====
+{
+  notes: "",
+  html: `<div class="full center"><h1 class="green" style="font-size:clamp(2rem,4vw,3.5rem);">Recommendation 3</h1><p class="dim" style="font-size:clamp(1rem,1.5vw,1.3rem);">Fine-Grained Policies</p></div>`
 },
 
 // ===== Rec 3: RAR as First-Class Citizen =====
@@ -996,6 +1038,12 @@ const slides = [
       <p style="font-size:clamp(0.9rem,1.2vw,1.1rem);"><span class="green">→</span> Server checks <code style="background:var(--code-bg); padding:2px 6px; border-radius:4px;">authorization_details</code> on every tool call</p>
     </div>
   </div>`
+},
+
+// ===== Section: Recommendation 4 =====
+{
+  notes: "",
+  html: `<div class="full center"><h1 class="green" style="font-size:clamp(2rem,4vw,3.5rem);">Recommendation 4</h1><p class="dim" style="font-size:clamp(1rem,1.5vw,1.3rem);">Escalate</p></div>`
 },
 
 // ===== Rec 4: Escalate — Build 1 (Allow + Deny) =====
