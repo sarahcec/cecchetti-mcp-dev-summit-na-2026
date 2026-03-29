@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" style="background:#0a0a0f">
+  <defs>
+    <marker id="arr-grey" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#a1a1aa"/>
+    </marker>
+    <marker id="arr-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#60a5fa"/>
+    </marker>
+    <marker id="arr-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#f87171"/>
+    </marker>
+  </defs>
+
+  <!-- Human -->
+  <rect x="60" y="210" width="180" height="80" rx="10" fill="rgba(255,255,255,0.05)" stroke="#4ade80" stroke-width="1.5"/>
+  <text x="150" y="258" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="600" fill="#e4e4e7">Human</text>
+
+  <!-- Application -->
+  <rect x="380" y="210" width="200" height="80" rx="10" fill="rgba(255,255,255,0.05)" stroke="#60a5fa" stroke-width="1.5"/>
+  <text x="480" y="258" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="600" fill="#e4e4e7">Application</text>
+
+  <!-- Protected Resource -->
+  <rect x="720" y="210" width="200" height="80" rx="10" fill="rgba(255,255,255,0.05)" stroke="#a1a1aa" stroke-width="1.5"/>
+  <text x="820" y="250" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="600" fill="#e4e4e7">Protected</text>
+  <text x="820" y="275" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="600" fill="#e4e4e7">Resource</text>
+
+  <!-- Arrow: Application → Protected Resource (token, pointing right) -->
+  <line x1="590" y1="232" x2="710" y2="232" stroke="#a1a1aa" stroke-width="2" marker-end="url(#arr-grey)"/>
+  <text x="650" y="220" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" fill="#a1a1aa">token</text>
+
+  <!-- Arrow: Protected Resource → Application (data, pointing left) -->
+  <line x1="710" y1="268" x2="590" y2="268" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <text x="650" y="296" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" fill="#60a5fa">data</text>
+
+  <!-- Arrow: Application → Human (data, pointing left) -->
+  <line x1="370" y1="250" x2="250" y2="250" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <text x="310" y="278" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="13" fill="#60a5fa">data</text>
+
+  <!-- Red glow -->
+  <line x1="250" y1="305" x2="370" y2="305" stroke="#f87171" stroke-width="8" opacity="0.15"/>
+
+  <!-- Red arrow — Human data to Application -->
+  <line x1="250" y1="305" x2="360" y2="305" stroke="#f87171" stroke-width="2.5" marker-end="url(#arr-red)"/>
+  <text x="310" y="328" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="600" fill="#f87171">data</text>
+</svg>

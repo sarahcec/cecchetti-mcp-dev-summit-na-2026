@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 180" style="background:#0a0a0f">
+  <rect x="0" y="0" width="400" height="180" rx="12" fill="rgba(239,68,68,0.06)" stroke="rgba(239,68,68,0.2)" stroke-width="1"/>
+  <text x="200" y="25" text-anchor="middle" fill="#f87171" font-family="Inter,sans-serif" font-size="12" font-weight="600">BEFORE</text>
+  <!-- Server A -->
+  <rect x="20" y="45" width="80" height="40" rx="6" fill="rgba(239,68,68,0.12)" stroke="#f87171" stroke-width="1"/><text x="60" y="70" text-anchor="middle" fill="#f87171" font-family="Inter,sans-serif" font-size="10">Server A</text>
+  <!-- LLM -->
+  <circle cx="200" cy="100" r="30" fill="rgba(96,165,250,0.12)" stroke="#60a5fa" stroke-width="1"/><text x="200" y="104" text-anchor="middle" fill="#60a5fa" font-family="Inter,sans-serif" font-size="10">LLM</text>
+  <!-- Server B -->
+  <rect x="300" y="45" width="80" height="40" rx="6" fill="rgba(34,197,94,0.12)" stroke="#4ade80" stroke-width="1"/><text x="340" y="70" text-anchor="middle" fill="#4ade80" font-family="Inter,sans-serif" font-size="10">Server B</text>
+  <!-- Server C -->
+  <rect x="300" y="115" width="80" height="40" rx="6" fill="rgba(34,197,94,0.12)" stroke="#4ade80" stroke-width="1"/><text x="340" y="140" text-anchor="middle" fill="#4ade80" font-family="Inter,sans-serif" font-size="10">Server C</text>
+  <!-- Red arrows from Server A's sampling reaching everything -->
+  <line x1="100" y1="65" x2="170" y2="95" stroke="#f87171" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="230" y1="90" x2="300" y2="65" stroke="#f87171" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="230" y1="110" x2="300" y2="135" stroke="#f87171" stroke-width="1.5" stroke-dasharray="4,3"/>
+</svg>
