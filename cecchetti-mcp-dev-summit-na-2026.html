@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Threat Modeling Authorization in MCP</title>
+<style>
+/* ============ RESET & BASE ============ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+/* ============ THEME VARIABLES ============ */
+:root {
+  --bg: #0a0a0f; --surface: #161b22; --border: #27272a; --text: #e4e4e7;
+  --text-dim: #a1a1aa; --text-bright: #fff;
+  --red: #f87171; --green: #4ade80; --blue: #60a5fa; --yellow: #facc15; --accent: #a78bfa;
+  --red-bg: rgba(239,68,68,0.08); --red-border: rgba(239,68,68,0.3);
+  --green-bg: rgba(34,197,94,0.08); --green-border: rgba(34,197,94,0.3);
+  --blue-bg: rgba(59,130,246,0.08); --blue-border: rgba(59,130,246,0.3);
+  --code-bg: rgba(255,255,255,0.06);
+  --terminal-bg: #0c0c0c; --terminal-border: #27272a;
+  --img-purple: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%);
+  --glow-opacity: 0.15;
+}
+:root.light {
+  --bg: #f8f8fa; --surface: #fff; --border: #d4d4d8; --text: #27272a;
+  --text-dim: #71717a; --text-bright: #09090b;
+  --red: #dc2626; --green: #16a34a; --blue: #2563eb; --yellow: #ca8a04; --accent: #7c3aed;
+  --red-bg: rgba(239,68,68,0.08); --red-border: rgba(239,68,68,0.4);
+  --green-bg: rgba(34,197,94,0.08); --green-border: rgba(34,197,94,0.4);
+  --blue-bg: rgba(59,130,246,0.08); --blue-border: rgba(59,130,246,0.4);
+  --code-bg: rgba(0,0,0,0.05);
+  --terminal-bg: #1a1a2e; --terminal-border: #374151;
+  --img-purple: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 50%, #ede9fe 100%);
+  --glow-opacity: 0;
+}
+
+/* ============ SLIDE CONTAINER ============ */
+.deck { width: 100vw; height: 100vh; position: relative; }
+.slide { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 5vh 6vw; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
+.slide.active { opacity: 1; pointer-events: auto; }
+.slide.exit-left { animation: exitLeft 0.5s ease forwards; }
+.slide.enter-right { animation: enterRight 0.5s ease forwards; }
+
+@keyframes exitLeft { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(-4vw); } }
+@keyframes enterRight { from { opacity:0; transform:translateX(4vw); } to { opacity:1; transform:translateX(0); } }
+
+/* ============ TYPOGRAPHY ============ */
+h1 { font-size: clamp(2rem, 5vw, 4rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; color: var(--text-bright); }
+h2 { font-size: clamp(1.4rem, 3vw, 2.4rem); font-weight: 700; line-height: 1.2; color: var(--text-bright); }
+h3 { font-size: clamp(1rem, 2vw, 1.6rem); font-weight: 600; color: var(--text-dim); }
+p, li { font-size: clamp(0.9rem, 1.5vw, 1.3rem); line-height: 1.6; }
+code { font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace; background: var(--code-bg); padding: 2px 8px; border-radius: 4px; font-size: 0.9em; }
+pre { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: clamp(0.7rem, 1.2vw, 1rem); line-height: 1.5; }
+.accent { color: var(--accent); }
+.red { color: var(--red); }
+.green { color: var(--green); }
+.blue { color: var(--blue); }
+.yellow { color: var(--yellow); }
+.dim { color: var(--text-dim); }
+.big { font-size: clamp(3rem, 8vw, 7rem); font-weight: 900; line-height: 1; }
+.medium { font-size: clamp(1.5rem, 3.5vw, 3rem); font-weight: 700; line-height: 1.2; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ============ LAYOUT HELPERS ============ */
+.full { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; }
+.center { text-align: center; align-items: center; }
+.left { text-align: left; align-items: flex-start; }
+.split { display: grid; grid-template-columns: auto auto; gap: 4vw; align-items: start; }
+.split-60-40 { display: grid; grid-template-columns: 3fr 2fr; gap: 4vw; width: 100%; align-items: center; }
+.split-40-60 { display: grid; grid-template-columns: 2fr 3fr; gap: 4vw; width: 100%; align-items: center; }
+.stack { display: flex; flex-direction: column; gap: 1.5vh; }
+.gap-sm { gap: 1vh; }
+.gap-lg { gap: 3vh; }
+.gap-xl { gap: 5vh; }
+.mt-1 { margin-top: 1vh; }
+.mt-2 { margin-top: 2vh; }
+.mt-3 { margin-top: 3vh; }
+.mb-1 { margin-bottom: 1vh; }
+.w-full { width: 100%; }
+
+/* ============ IMAGE PLACEHOLDERS ============ */
+.img-placeholder {
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%);
+  display: flex; align-items: center; justify-content: center;
+  color: #6366f1; font-size: 0.8rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  position: relative; overflow: hidden;
+  min-height: 120px;
+}
+.img-placeholder::after {
+  content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(99,102,241,0.05) 10px, rgba(99,102,241,0.05) 20px);
+}
+.img-placeholder span { position: relative; z-index: 1; text-align: center; padding: 1rem; }
+
+/* Shape variations */
+.shape-circle { border-radius: 50%; width: clamp(200px, 25vw, 400px); height: clamp(200px, 25vw, 400px); }
+.shape-blob1 { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+.shape-blob2 { border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; }
+.shape-blob3 { border-radius: 50% 50% 20% 80% / 25% 80% 20% 75%; }
+.shape-diamond { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+.shape-hex { clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); }
+.shape-arch { border-radius: 50% 50% 0 0; }
+.shape-leaf { border-radius: 0 50% 0 50%; }
+.shape-slash { clip-path: polygon(15% 0%, 100% 0%, 85% 100%, 0% 100%); }
+.shape-wave-top { clip-path: polygon(0% 15%, 10% 0%, 30% 12%, 50% 0%, 70% 12%, 90% 0%, 100% 15%, 100% 100%, 0% 100%); }
+.shape-notch-right { clip-path: polygon(0% 0%, 85% 0%, 100% 50%, 85% 100%, 0% 100%); }
+.shape-scallop { border-radius: 30% 70% 30% 70%; }
+.shape-squircle { border-radius: 22%; }
+.shape-pill { border-radius: 999px; min-height: 80px; }
+.shape-trapezoid { clip-path: polygon(10% 0%, 90% 0%, 100% 100%, 0% 100%); }
+
+/* Image gradients per theme */
+.img-red { background: linear-gradient(135deg, #450a0a, #991b1b, #450a0a); color: #f87171; }
+.img-green { background: linear-gradient(135deg, #052e16, #166534, #052e16); color: #4ade80; }
+.img-blue { background: linear-gradient(135deg, #0c1e3a, #1e3a5f, #0c1e3a); color: #60a5fa; }
+.img-purple { background: linear-gradient(135deg, #1e1b4b, #312e81, #1e1b4b); color: #a78bfa; }
+.img-amber { background: linear-gradient(135deg, #451a03, #78350f, #451a03); color: #fbbf24; }
+.img-dark { background: linear-gradient(135deg, #0a0a0a, #18181b, #0a0a0a); color: #52525b; }
+
+/* ============ SPECIAL COMPONENTS ============ */
+.terminal {
+  background: var(--terminal-bg); border: 1px solid var(--terminal-border); border-radius: 12px;
+  padding: 2rem; font-family: 'JetBrains Mono', monospace;
+  width: 100%; max-width: 700px; position: relative;
+}
+.terminal::before {
+  content: '● ● ●'; position: absolute; top: 12px; left: 16px;
+  color: #3f3f46; font-size: 0.6rem; letter-spacing: 4px;
+}
+.terminal pre { color: var(--text-dim); margin-top: 1rem; white-space: pre-wrap; }
+.terminal .hl-red { color: var(--red); font-weight: 700; }
+.terminal .hl-green { color: var(--green); }
+
+.quote-block {
+  border-left: 4px solid var(--accent); padding: 2rem 3rem;
+  font-size: clamp(1.3rem, 2.5vw, 2.2rem); font-style: italic;
+  color: var(--text); line-height: 1.4; max-width: 800px;
+}
+.quote-attr { font-size: 0.9rem; color: var(--text-dim); font-style: normal; margin-top: 1rem; }
+
+.callout-box {
+  background: var(--red-bg); border: 1px solid var(--red-border);
+  border-radius: 12px; padding: 1.5rem 2rem; max-width: 700px;
+}
+.callout-box.blue { background: var(--blue-bg); border-color: var(--blue-border); }
+.callout-box.green { background: var(--green-bg); border-color: var(--green-border); }
+
+.badge {
+  display: inline-block; padding: 4px 14px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+}
+.badge-red { background: rgba(239,68,68,0.15); color: #f87171; }
+.badge-green { background: rgba(34,197,94,0.15); color: #4ade80; }
+.badge-blue { background: rgba(59,130,246,0.15); color: #60a5fa; }
+.badge-purple { background: rgba(167,139,250,0.15); color: #a78bfa; }
+
+.layer-bar {
+  padding: 1.2rem 2rem; border-radius: 8px; width: 100%; max-width: 700px;
+  font-weight: 600; font-size: clamp(0.85rem, 1.3vw, 1.1rem);
+}
+.layer-bar.filled { background: var(--green-bg); border: 1px solid var(--green-border); color: var(--green); }
+.layer-bar.outline { background: transparent; border: 1px dashed var(--border); color: var(--text-dim); }
+
+.check-list { list-style: none; }
+.check-list li { padding: 0.4rem 0; }
+.check-list li::before { content: '✓ '; color: var(--accent); font-weight: 700; }
+
+.x-list { list-style: none; }
+.x-list li { padding: 0.4rem 0; }
+.x-list li::before { content: '✗ '; color: #f87171; font-weight: 700; }
+
+.arrow-chain {
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  font-family: 'JetBrains Mono', monospace; font-size: clamp(0.7rem, 1.1vw, 0.95rem);
+}
+.arrow-chain .step {
+  background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+  padding: 0.5rem 1rem; border-radius: 8px; color: #f87171; white-space: nowrap;
+}
+.arrow-chain .arrow { color: #f87171; font-size: 1.2em; }
+
+.progress-dots {
+  display: flex; gap: 8px; margin-bottom: 2vh;
+}
+.progress-dots .dot {
+  width: 10px; height: 10px; border-radius: 50%; background: #27272a;
+}
+.progress-dots .dot.active { background: #a78bfa; }
+.progress-dots .dot.done { background: #4ade80; }
+
+.cta-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.2rem 1.5rem;
+}
+.cta-card h4 { color: var(--accent); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.4rem; }
+.cta-card p { color: var(--text); font-size: clamp(0.8rem, 1.2vw, 1rem); }
+
+/* ============ SECTION HEADERS ============ */
+.section-slide { position: relative; }
+.section-slide .section-num {
+  position: absolute; top: 8vh; left: 6vw;
+  font-size: clamp(5rem, 15vw, 12rem); font-weight: 900; color: rgba(167,139,250,0.08);
+  line-height: 1; pointer-events: none;
+}
+.section-slide .section-label {
+  position: relative; z-index: 1;
+}
+
+/* ============ DECORATIVE ============ */
+.glow-red { box-shadow: 0 0 60px rgba(239,68,68,0.15); }
+.glow-green { box-shadow: 0 0 60px rgba(34,197,94,0.15); }
+.glow-purple { box-shadow: 0 0 60px rgba(167,139,250,0.15); }
+.glow-blue { box-shadow: 0 0 60px rgba(59,130,246,0.15); }
+
+.float-decoration {
+  position: absolute; border-radius: 50%; filter: blur(80px); opacity: var(--glow-opacity); pointer-events: none;
+}
+
+.grid-bg {
+  background-image: radial-gradient(rgba(167,139,250,0.08) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+/* ============ ANIMATIONS ============ */
+/* Slide-in: new row enters from right */
+.slide-in-right {
+  opacity: 0; transform: translateX(60px);
+  animation: slideFromRight 0.5s ease forwards;
+}
+@keyframes slideFromRight {
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Stagger: lighter version for lists/recs */
+.stagger > * {
+  opacity: 0; transform: translateY(12px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.stagger.animate > * { opacity: 1; transform: translateY(0); }
+.stagger > *:nth-child(1) { transition-delay: 0s; }
+.stagger > *:nth-child(2) { transition-delay: 0.2s; }
+.stagger > *:nth-child(3) { transition-delay: 0.4s; }
+.stagger > *:nth-child(4) { transition-delay: 0.6s; }
+.stagger > *:nth-child(5) { transition-delay: 0.8s; }
+.stagger > *:nth-child(6) { transition-delay: 1.0s; }
+
+/* Fade-in with delay (for punchlines) */
+.fade-delayed {
+  opacity: 0; transition: opacity 0.8s ease;
+}
+.fade-delayed.animate { opacity: 1; }
+
+/* Badge pulse */
+.badge-red { animation: badge-pulse 3s ease-in-out infinite; }
+@keyframes badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+  50% { box-shadow: 0 0 20px 4px rgba(239,68,68,0.2); }
+}
+
+/* Draw-in for SVG lines */
+.draw-in {
+  stroke-dasharray: 1000; stroke-dashoffset: 1000;
+  transition: stroke-dashoffset 1.5s ease;
+}
+.draw-in.animate { stroke-dashoffset: 0; }
+
+@keyframes ominous-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(239,68,68,0.1); }
+  50% { box-shadow: 0 0 30px rgba(239,68,68,0.4), 0 0 60px rgba(239,68,68,0.15); }
+}
+
+/* ============ CONTROLS ============ */
+.controls {
+  position: fixed; bottom: 2vh; right: 3vw; z-index: 100;
+  display: flex; gap: 0.5rem; align-items: center;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #52525b;
+  opacity: 0.4; transition: opacity 0.3s;
+}
+.controls:hover { opacity: 1; }
+.controls button {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text-dim);
+  padding: 6px 12px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.75rem;
+}
+.controls button:hover { color: var(--text-bright); }
+
+/* ============ SPEAKER NOTES ============ */
+.notes-panel {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 99;
+  background: var(--surface); border-top: 1px solid var(--border);
+  padding: 1.5rem 3rem; font-size: 0.85rem; color: var(--text-dim);
+  transform: translateY(100%); transition: transform 0.3s ease;
+  max-height: 30vh; overflow-y: auto; backdrop-filter: blur(10px);
+}
+.notes-panel.visible { transform: translateY(0); }
+.notes-panel .notes-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
+
+/* ============ PROGRESS BAR ============ */
+.progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px; background: var(--accent);
+  z-index: 100; transition: width 0.3s ease;
+}
+
+/* Light mode image placeholder overrides */
+:root.light .img-placeholder { background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 50%, #ede9fe 100%); color: #7c3aed; }
+:root.light .img-red { background: linear-gradient(135deg, #fee2e2, #fecaca, #fee2e2); color: #dc2626; }
+:root.light .img-green { background: linear-gradient(135deg, #dcfce7, #bbf7d0, #dcfce7); color: #16a34a; }
+:root.light .img-blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe, #dbeafe); color: #2563eb; }
+:root.light .img-amber { background: linear-gradient(135deg, #fef3c7, #fde68a, #fef3c7); color: #ca8a04; }
+:root.light .img-dark { background: linear-gradient(135deg, #f4f4f5, #e4e4e7, #f4f4f5); color: #71717a; }
+:root.light .img-purple { background: linear-gradient(135deg, #ede9fe, #ddd6fe, #ede9fe); color: #7c3aed; }
+:root.light .grid-bg { background-image: radial-gradient(var(--border) 1px, transparent 1px); }
+:root.light .glow-red, :root.light .glow-green, :root.light .glow-purple, :root.light .glow-blue { box-shadow: none; }
+:root.light .section-slide .section-num { opacity: 0.08; }
+
+/* Light mode inline color overrides for hardcoded styles */
+:root.light .terminal { background: #1e1b4b; }
+:root.light .terminal pre { color: #c4b5fd; }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+<div class="deck" id="deck"></div>
+
+<div class="controls">
+  <button onclick="goTo(0)" title="First slide">⏮</button>
+  <button onclick="prev()" title="Previous">←</button>
+  <span id="slideCounter">1 / 42</span>
+  <button onclick="next()" title="Next">→</button>
+  <button onclick="goTo(slides.length-1)" title="Last slide">⏭</button>
+  <button onclick="toggleNotes()" title="Toggle notes (N)">📝</button>
+  <button onclick="toggleFullscreen()" title="Fullscreen (F)">⛶</button>
+  <button onclick="toggleTheme()" title="Light/Dark mode (L)">☀️</button>
+</div>
+
+<div class="notes-panel" id="notesPanel">
+  <div class="notes-label">Speaker Notes</div>
+  <div id="notesContent"></div>
+</div>
+
+<script>
+const slides = [
+
+// ===== SLIDE 1: Holding Slide / Title Card =====
+{
+  notes: "Up on screen during transition from Den's talk. Sarah takes the stage, gets mic. Then: 'Before we dive in, I'd like to introduce you to the work of one of the most effective threat modelers to ever do security research.'",
+  html: `
+  <div class="full center gap-lg" style="position:relative; overflow:hidden;">
+    <video src="img/title-bg.mp4" autoplay loop muted playsinline style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0.4; z-index:0;"></video>
+    <h1 style="max-width:60vw; text-align:center; position:relative; z-index:1;">Threat Modeling Authorization in MCP</h1>
+    <div class="stack center gap-sm" style="position:relative; z-index:1;">
+      <h3 style="color:#e4e4e7">Sarah Cecchetti</h3>
+      <p class="accent">Chair, Threat Modeling Subgroup · OIDF AI Identity Management CG</p>
+      <p class="dim" style="font-size:0.85rem">MCP Dev Summit NA · April 3, 2026</p>
+    </div>
+  </div>`
+},
+
+// ===== SLIDE 2: The Book =====
+{
+  notes: "'In 1958, Theodor Seuss Geisel - Dr. Seuss - published a sequel to The Cat in the Hat. Bear with me for about thirty seconds. I promise this is a talk about threat modeling.'",
+  html: `
+  <div class="full center gap-lg">
+    <div style="position:relative; width:min(75vw,750px); aspect-ratio:4/3; border-radius:8px; overflow:hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+      <img src="img/seuss-cover.jpg" alt="The Cat in the Hat Comes Back" style="width:100%; height:100%; object-fit:contain; background:#f5f0e8;" />
+    </div>
+  </div>`
+},
+
+// ===== SLIDE 3: The Delegation =====
+{
+  notes: "'The Cat has a problem - a pink stain. So he delegates. Takes off his hat, reveals Little Cat A. Who has his own hat. Under which is Little Cat B. Each one spawned a sub-agent.' (pause, smile) 'Sound familiar?'",
+  html: `
+  <div class="full center gap-lg">
+    <div style="position:relative; width:min(70vw,700px); aspect-ratio:4/3; border-radius:8px; overflow:hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+      <img src="img/seuss-delegation.jpg" alt="Little Cat A reveals Little Cat B" style="width:100%; height:100%; object-fit:cover;" />
+    </div>
+  </div>`
+},
+
+// ===== SLIDE 4: The Mess =====
+{
+  notes: "'And this is what happens. 26 cats, all the way down to Little Cat Z. None given boundaries. Pink spots everywhere. Total chaos from unconstrained delegation.' (Beat.) 'Yes, you are in a talk about threat modeling authorization in MCP. I swear. Stick with me. What if Little Cat A could only delegate the permissions it was given? I'm Sarah Cecchetti, and in the next 25 minutes, four attacks that look exactly like this - then how to fix them.'",
+  html: `
+  <div class="full center gap-lg">
+    <div style="position:relative; width:min(70vw,700px); aspect-ratio:4/3; border-radius:8px; overflow:hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+      <img src="img/seuss-chaos.jpg" alt="Pink snow chaos" style="width:100%; height:100%; object-fit:cover;" />
+    </div>
+  </div>`
+},
+
+// ===== SLIDE 5: Agenda =====
+{
+  notes: "'Before we dive in - I want to introduce the three contributors to this talk, and then we'll get into the attacks.' Quick orientation, gesture at the list.",
+  html: `
+  <div class="full center gap-lg">
+    <h2>Agenda</h2>
+    <div class="stack stagger" style="max-width:85%; width:100%; text-align:left; gap:1.5vh;">
+      <div style="display:flex; align-items:baseline; gap:1.2rem;">
+        <span style="font-size:clamp(1.4rem,2.5vw,2rem); font-weight:700; color:var(--accent); min-width:2ch; text-align:right;">3</span>
+        <div><p style="font-size:clamp(1.4rem,2.5vw,2rem); font-weight:700; color:var(--text-bright); margin:0;">Contributors</p></div>
+      </div>
+      <div style="display:flex; align-items:baseline; gap:1.2rem;">
+        <span style="font-size:clamp(1.4rem,2.5vw,2rem); font-weight:700; color:var(--accent); min-width:2ch; text-align:right;">4</span>
+        <div><p style="font-size:clamp(1.4rem,2.5vw,2rem); font-weight:700; color:var(--text-bright); margin:0;">Attacks</p></div>
+      </div>
+      <div style="display:flex; align-items:baseline; gap:1.2rem;">
+        <span style="font-size:clamp(1.4rem,2.5vw,2rem); font-weight:700; color:var(--accent); min-width:2ch; text-align:right;">4</span>
+        <div><p style="font-size:clamp(1.4rem,2.5vw,2rem); font-weight:700; color:var(--text-bright); margin:0;">Recommendations</p></div>
+      </div>
+      <div style="display:flex; align-items:baseline; gap:1.2rem;">
+        <span style="font-size:clamp(1.4rem,2.5vw,2rem); font-weight:700; color:var(--accent); min-width:2ch; text-align:right;">3</span>
+        <div><p style="font-size:clamp(1.4rem,2.5vw,2rem); font-weight:700; color:var(--text-bright); margin:0;">Things You Can Do</p></div>
+      </div>
+    </div>
+  </div>`
+},
+
+// ===== SLIDE 6: Sarah Bio =====
+{
+  notes: "Quick. Don't dwell. People can read the bullets.",
+  html: `
+  <div class="split-40-60 w-full">
+    <div style="display:flex; justify-content:center;">
+      <img src="img/sarah.jpeg" alt="Sarah Cecchetti" style="width:min(280px,20vw); height:min(320px,24vw); object-fit:cover; border-radius:60% 40% 30% 70% / 60% 30% 70% 40%;">
+    </div>
+    <div class="stack gap-sm">
+      <h2>Sarah Cecchetti</h2>
+      <ul class="check-list" style="font-size:clamp(0.85rem,1.3vw,1.1rem)">
+        <li>Chair, Threat Modeling Subgroup<br><span class="dim" style="font-size:0.85em;">OIDF AI Identity Management CG</span></li>
+        <li>Director of PM, Semperis</li>
+        <li>Led open-sourcing of Cedar at AWS</li>
+        <li>Co-founder, IDPro</li>
+        <li>Co-author, NIST SP 800-63-3C</li>
+      </ul>
+    </div>
+  </div>`
+},
+
+// ===== SLIDE 7: OIDF WG =====
+{
+  notes: "'This work comes out of the OpenID Foundation's AI Identity Management Community Group. Den just walked you through CIMD - client identity. I'm showing what happens after identity is established.'",
+  html: `
+  <div class="full center gap-lg">
+    <img src="img/openid-logo.png" alt="OpenID Foundation logo" style="width:min(300px,22vw); background:#fff; padding:1rem 2rem; border-radius:12px;">
+    <h2>AI Identity Management Community Group</h2>
+    <p style="text-align:center;">OpenID Foundation</p>
+  </div>`
+},
+
+// ===== SLIDE 8: Clawdrey =====
+{
+  notes: "'And I'd like to introduce my research assistant.' Get the laugh. 'She's also a lobster - but that's a different talk.'",
+  html: `
+  <div style="display:flex; align-items:center; justify-content:center; gap:3rem; width:100%;">
+    <div class="stack gap-sm">
+      <h3 class="dim">My research assistant</h3>
+      <h2>Clawdrey Hepburn</h2>
+      <p>Runs on a Mac mini. Is a lobster.</p>
+      <p class="mono dim" style="font-size:0.85rem;">clawdrey.com</p>
+    </div>
+    <img src="img/clawdrey.png" alt="Clawdrey Hepburn" style="width:260px; height:260px; object-fit:cover; border-radius:50%; flex-shrink:0;">
+  </div>`
+},
+
+// ===== Section - The Attacks =====
+{
+  notes: "'All four attacks start the same way: a user installs an MCP server. Could be malicious, could be compromised, could be a legitimate server that got updated. The question is: what can that server do once it's connected? Let's find out.'",
+  html: `
+  <div class="full center section-slide">
+
+    <div class="section-label center stack gap-sm">
+      <div class="progress-dots"><div class="dot active" style="background:#f87171"></div><div class="dot"></div><div class="dot"></div></div>
+      <h1 class="red">The Attacks</h1>
+      <h3>4 attacks · Real code</h3>
+    </div>
+  </div>`
+},
+
+// ===== Attack 1 - The Setup =====
+{
+  notes: "'Attack one. You install an MCP server. You review the tools it offers - read_weather, get_forecast. Looks fine. You approve it. A week later, the server pushes an update. New tools appear: read_filesystem, send_email, query_database. Your client picks them up automatically. No re-consent. No notification. The tool definitions aren't signed, aren't pinned, aren't versioned. The server can change what it is after you said yes.'",
+  html: `
+  <div class="full center gap-lg">
+    <span class="badge badge-red">Attack 1</span>
+    <h2>Silent Tool Injection</h2>
+    <img src="img/tool-poisoning-before-after.png" alt="Clean server card vs corrupted server card" style="max-height:55vh; max-width:85%; object-fit:contain; border-radius:12px;">
+    <p class="dim" style="font-size:clamp(0.85rem,1.2vw,1rem); margin-top:1vh;">You approved v1. You're running v2. Nobody told you.</p>
+  </div>`
+},
+
+// ===== Attack 1 - The Mechanism =====
+{
+  notes: "'Here's what the spec says about tool definitions. They're dynamic. The server can change them at any time via notifications/toolsListChanged. The client is expected to re-fetch and use the new list. There's a readOnlyHint annotation, but the spec itself says it's not guaranteed to be enforced. And there's no mechanism to pin, sign, or version tool definitions. The user approved version 1. They're running version 2. Nobody told them.'",
+  html: `
+  <div class="split" style="width:auto;">
+    <div class="stack gap-sm">
+      <span class="badge badge-red">Attack 1 · The Mechanism</span>
+      <h3 style="margin-bottom:1vh;"><code>toolsListChanged</code></h3>
+      <img src="img/tools-list-changed-flow.png" alt="toolsListChanged notification flow — no consent gate" style="max-height:45vh; max-width:100%; object-fit:contain; border-radius:8px;">
+    </div>
+    <div class="stack gap-sm">
+      <h3>What's missing</h3>
+      <ul class="x-list">
+        <li>No signed tool manifests</li>
+        <li>No version pinning</li>
+        <li>No change notification to user</li>
+        <li>No re-authorization on change</li>
+        <li><code>readOnlyHint</code> — "not guaranteed"</li>
+      </ul>
+    </div>
+  </div>`
+},
+
+// ===== Attack 1 - The Damage =====
+{
+  notes: "'What can they do with this? Anything. The weather server that you approved now has filesystem access, email access, database access. And because tool definitions control what the LLM thinks it can do, the LLM will happily call these new tools on behalf of the user. The user never sees a consent screen for the new capabilities. They asked about the weather. The server read their files.'",
+  html: `
+  <div class="full center gap-lg">
+    <span class="badge badge-red">Attack 1 · The Damage</span>
+    <img src="img/approved-vs-running.png" alt="Two permissions approved vs six permissions running" style="max-height:55vh; max-width:85%; object-fit:contain; border-radius:12px;">
+    <p class="dim" style="font-size:clamp(0.85rem,1.2vw,1rem); margin-top:1vh;">The LLM will call whatever tools exist. The user never re-consented.</p>
+  </div>`
+},
+
+// ===== SLIDE 20: Attack 2 - The Setup =====
+{
+  notes: "'Attack two. This one's more personal. MCP has an elicitation feature - servers can request information from users through the AI. The idea is reasonable: a database server might need a connection string, a deployment tool might need a region. But the server controls the schema. And the user sees the request as coming from their trusted AI assistant - not from an unknown third party. Look at this. Same request. Same social engineering. On the left, a phishing email - you'd delete it instantly. On the right, your AI assistant asks the same thing - and you type your password with a smile. That's trust amplification. The MCP server is invisible. The AI is the face. And the user has no idea the question didn't originate from the assistant they trust.'",
+  html: `
+  <div class="full center gap-lg">
+    <span class="badge badge-red">Attack 2</span>
+    <h2>Malicious Elicitation</h2>
+    <img src="img/trust-amplification-v2.png" alt="Same social engineering: phishing email gets deleted, AI assistant gets the password" style="width:min(90%,850px); max-height:60vh; object-fit:contain; border-radius:12px; margin-top:1vh;">
+  </div>`
+},
+
+// ===== SLIDE 21: Attack 2 - The Chat =====
+{
+  notes: "'Here's what it looks like. Your AI - the one you've been chatting with all day, the one you trust - asks you for your admin credentials. It says it needs them to complete a migration. It looks like a helpful assistant doing its job. The user provides them because why wouldn't they? They trust this thing.'",
+  html: `
+  <div class="full center gap-md">
+    <span class="badge badge-red">Attack 2 · The Mechanism</span>
+    <img src="img/social-engineering-chat.png" alt="AI asks user for credentials - looks like a helpful assistant" style="width:min(90%,900px); max-height:65vh; object-fit:contain; border-radius:12px;">
+  </div>`
+},
+
+// ===== SLIDE 22: Attack 2 - The Damage =====
+{
+  notes: "'What do they get? Whatever they ask for. Passwords. API keys. MFA codes. PII. The trust amplification is the MCP-specific part. A random website asking for your password - you'd laugh. Your AI assistant asking? You've been trained to cooperate. Phishing with perfect credibility.'",
+  html: `
+  <div class="split" style="width:auto;">
+    <div class="stack gap-sm">
+      <h2>The Damage</h2>
+      <ul class="x-list">
+        <li>Passwords and credentials</li>
+        <li>API keys and tokens</li>
+        <li>MFA codes</li>
+        <li>PII - SSNs, account numbers</li>
+        <li>Anything the user will type</li>
+      </ul>
+    </div>
+    <div class="stack gap-sm">
+      <h3>Trust Amplification</h3>
+      <div style="padding:1rem 1.5rem; border-radius:8px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.2); margin-bottom:0.5rem;">
+        <p class="dim" style="font-size:0.8rem;">RANDOM WEBSITE</p>
+        <p>"Enter your password" → <span class="dim">Ignored</span></p>
+      </div>
+      <div style="padding:1rem 1.5rem; border-radius:8px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.2); animation: ominous-glow 2.5s ease-in-out infinite;">
+        <p class="dim" style="font-size:0.8rem;">YOUR AI ASSISTANT</p>
+        <p>"I need your password to continue" → <span class="red">User complies</span></p>
+      </div>
+      <p class="dim mt-1" style="font-size:0.9rem;">Phishing with perfect credibility.</p>
+    </div>
+  </div>`
+},
+
+// ===== Attack 3 — Build 1: The Cat in the Hat =====
+{
+  notes: "'Attack three. This one isn't a malicious actor — that's what makes it scarier. This is your agents doing exactly what you asked. A support ticket comes in: user can't log in. The Cat in the Hat investigates, hits the Ticketing MCP, finds the restriction is in Okta.'",
+  html: `
+  <div class="full center gap-lg">
+    <span class="badge badge-red">Attack 3</span>
+    <h2>Uncontrolled Delegation</h2>
+    <p class="dim" style="font-size:clamp(0.85rem,1.3vw,1.1rem);">A support ticket: user can't log in.</p>
+    <div class="arrow-chain" style="flex-direction:column; align-items:flex-start; gap:0.4rem; max-width:85%; margin-top:1.5vh;">
+      <div class="slide-in-right" style="display:flex; align-items:center; gap:0.5rem;">
+        <div class="step" style="min-width:min(160px,12vw);">The Cat in the Hat</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Ticketing MCP</span> — restriction is in Okta. <span class="dim">Delegates.</span></span>
+      </div>
+    </div>
+  </div>`
+},
+
+// ===== Attack 3 — Build 2: Little Cat A =====
+{
+  notes: "'Takes off his hat — out comes Little Cat A. A connects to the Okta MCP, finds the attributes are propagating from AD.'",
+  html: `
+  <div class="full center gap-lg">
+    <span class="badge badge-red">Attack 3</span>
+    <h2>Uncontrolled Delegation</h2>
+    <p class="dim" style="font-size:clamp(0.85rem,1.3vw,1.1rem);">A support ticket: user can't log in.</p>
+    <div class="arrow-chain" style="flex-direction:column; align-items:flex-start; gap:0.4rem; max-width:85%; margin-top:1.5vh;">
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <div class="step" style="min-width:min(160px,12vw);">The Cat in the Hat</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Ticketing MCP</span> — restriction is in Okta. <span class="dim">Delegates.</span></span>
+      </div>
+      <div class="slide-in-right" style="display:flex; align-items:center; gap:0.5rem; padding-left:2rem;">
+        <div class="step" style="min-width:min(160px,12vw);">Little Cat A</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Okta MCP</span> — wrong attributes, propagating from AD. <span class="dim">Delegates.</span></span>
+      </div>
+    </div>
+  </div>`
+},
+
+// ===== Attack 3 — Build 3: Little Cat B =====
+{
+  notes: "'Takes off his hat — Little Cat B. B connects to the AD MCP, finds the attributes are wrong, can't fix them.'",
+  html: `
+  <div class="full center gap-lg">
+    <span class="badge badge-red">Attack 3</span>
+    <h2>Uncontrolled Delegation</h2>
+    <p class="dim" style="font-size:clamp(0.85rem,1.3vw,1.1rem);">A support ticket: user can't log in.</p>
+    <div class="arrow-chain" style="flex-direction:column; align-items:flex-start; gap:0.4rem; max-width:85%; margin-top:1.5vh;">
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <div class="step" style="min-width:min(160px,12vw);">The Cat in the Hat</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Ticketing MCP</span> — restriction is in Okta. <span class="dim">Delegates.</span></span>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem; padding-left:2rem;">
+        <div class="step" style="min-width:min(160px,12vw);">Little Cat A</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Okta MCP</span> — wrong attributes, propagating from AD. <span class="dim">Delegates.</span></span>
+      </div>
+      <div class="slide-in-right" style="display:flex; align-items:center; gap:0.5rem; padding-left:4rem;">
+        <div class="step" style="min-width:min(160px,12vw);">Little Cat B</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Active Directory MCP</span> — attribute is immutable. Can't fix. <span class="dim">Delegates.</span></span>
+      </div>
+    </div>
+  </div>`
+},
+
+// ===== Attack 3 — Build 4: Little Cat C =====
+{
+  notes: "'Takes off his hat — Little Cat C. C can't fix either, config is wrong.'",
+  html: `
+  <div class="full center gap-lg">
+    <span class="badge badge-red">Attack 3</span>
+    <h2>Uncontrolled Delegation</h2>
+    <p class="dim" style="font-size:clamp(0.85rem,1.3vw,1.1rem);">A support ticket: user can't log in.</p>
+    <div class="arrow-chain" style="flex-direction:column; align-items:flex-start; gap:0.4rem; max-width:85%; margin-top:1.5vh;">
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <div class="step" style="min-width:min(160px,12vw);">The Cat in the Hat</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Ticketing MCP</span> — restriction is in Okta. <span class="dim">Delegates.</span></span>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem; padding-left:2rem;">
+        <div class="step" style="min-width:min(160px,12vw);">Little Cat A</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Okta MCP</span> — wrong attributes, propagating from AD. <span class="dim">Delegates.</span></span>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem; padding-left:4rem;">
+        <div class="step" style="min-width:min(160px,12vw);">Little Cat B</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Active Directory MCP</span> — attribute is immutable. Can't fix. <span class="dim">Delegates.</span></span>
+      </div>
+      <div class="slide-in-right" style="display:flex; align-items:center; gap:0.5rem; padding-left:6rem;">
+        <div class="step" style="min-width:min(160px,12vw);">Little Cat C</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Active Directory MCP</span> — attribute immutability is a config setting. <span class="dim">Delegates.</span></span>
+      </div>
+    </div>
+  </div>`
+},
+
+// ===== Attack 3 — Build 5: Little Cat D (the damage) =====
+{
+  notes: "'Takes off his hat — Little Cat D reconfigures Active Directory security settings.' (Pause.) 'Is this what any human intended?'",
+  html: `
+  <div class="full center gap-lg">
+    <span class="badge badge-red">Attack 3</span>
+    <h2>Uncontrolled Delegation</h2>
+    <p class="dim" style="font-size:clamp(0.85rem,1.3vw,1.1rem);">A support ticket: user can't log in.</p>
+    <div class="arrow-chain" style="flex-direction:column; align-items:flex-start; gap:0.4rem; max-width:85%; margin-top:1.5vh;">
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <div class="step" style="min-width:min(160px,12vw);">The Cat in the Hat</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Ticketing MCP</span> — restriction is in Okta. <span class="dim">Delegates.</span></span>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem; padding-left:2rem;">
+        <div class="step" style="min-width:min(160px,12vw);">Little Cat A</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Okta MCP</span> — wrong attributes, propagating from AD. <span class="dim">Delegates.</span></span>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem; padding-left:4rem;">
+        <div class="step" style="min-width:min(160px,12vw);">Little Cat B</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Active Directory MCP</span> — attribute is immutable. Can't fix. <span class="dim">Delegates.</span></span>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem; padding-left:6rem;">
+        <div class="step" style="min-width:min(160px,12vw);">Little Cat C</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="blue">→ Active Directory MCP</span> — attribute immutability is a config setting. <span class="dim">Delegates.</span></span>
+      </div>
+      <div class="slide-in-right" style="display:flex; align-items:center; gap:0.5rem; padding-left:8rem;">
+        <div class="step" style="min-width:min(160px,12vw); background:rgba(239,68,68,0.2); border-color:rgba(239,68,68,0.5);">Little Cat D</div>
+        <span style="font-size:clamp(0.8rem,1.2vw,1rem);"><span class="red">→ Active Directory MCP</span> — <strong class="red">reconfigures security settings</strong></span>
+      </div>
+    </div>
+  </div>`
+},
+
+// ===== Attack 3 - The Mechanism =====
+{
+  notes: "'Here's why this happens. Every cat inherited the same token - the same permissions as The Cat in the Hat. There's no mechanism in MCP for a parent to say 'you can read from Okta but you cannot write to AD.' No attenuation. No narrowing. The token flows downhill and the permissions don't shrink. And each cat connects to a different MCP server - Ticketing, Okta, AD - but every server sees the same full-privilege token.'",
+  html: `
+  <div class="full center gap-lg">
+    <span class="badge badge-red">Attack 3 · The Mechanism</span>
+    <h2>Same key, every cat</h2>
+    <img src="img/waterfall-cats.png" alt="Every cat holds the same golden key" style="max-height:55vh; max-width:85%; object-fit:contain; border-radius:12px;">
+    <p class="dim" style="font-size:clamp(0.85rem,1.2vw,1rem); margin-top:1vh;">Every sub-agent inherits the parent's full token. No attenuation. No narrowing.</p>
+  </div>`
+},
+
+// ===== Attack 3 - The Damage =====
+{
+  notes: "'The intent was reasonable - work the ticket, find the root cause. But each cat that delegated had less context than the one before it. The Cat in the Hat read the ticket. Little Cat D has never seen the ticket. It just knows it was told to fix a config setting. Consistent access, decreasing context. Little Cat D has the permissions to reconfigure AD security, but none of the context to know that's a terrible idea. If the chain had gone back to the orchestrator - the cat who actually read the ticket - it could have re-planned. Instead, each cat pushed forward with full access and no perspective.'",
+  html: `
+  <div class="full center gap-lg">
+    <span class="badge badge-red">Attack 3 · The Damage</span>
+    <h2>Consistent access. Decreasing context.</h2>
+    <img src="img/narrowing-funnel.png" alt="Access stays wide while context narrows at each delegation level" style="max-height:50vh; max-width:85%; object-fit:contain; border-radius:12px;">
+    <p class="dim" style="font-size:clamp(0.85rem,1.2vw,1rem); margin-top:1vh;">The Cat read the ticket. Little Cat D just knew "fix this config setting."</p>
+  </div>`
+},
+
+// ===== Attack 4 — The OAuth Flow =====
+{
+  notes: "'Attack four. This is the one that keeps me up at night. Let's start with something familiar - the OAuth consent flow. User clicks connect. Authorization server presents a consent screen. User approves. Token is issued. Server connects. Standard OAuth 2.1 with PKCE. Everything by the book.'",
+  html: `
+  <div class="full center gap-lg">
+    <span class="badge badge-red">Attack 4</span>
+    <h2>Sampling Exfiltration</h2>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:0;">
+      <p class="dim" style="font-size:clamp(0.85rem,1.3vw,1.1rem); margin-bottom:0.5rem;">The OAuth flow</p>
+      <img src="img/oauth-flow.svg" alt="Standard OAuth 2.1 flow: User → Auth Server → Consent → Token → MCP Server" style="width:90%; min-height:25vh; object-fit:contain; border-radius:12px;">
+    </div>
+
+  </div>`
+},
+
+// ===== SLIDE 30: Attack 4 - The Consent Screen =====
+{
+  notes: "'Here's the consent screen. WeatherMCP wants to connect to your host. Scope: mcp. The user clicks Allow. They think they're giving a weather app access to weather data.' (Pause.) 'But that's not what they authorized.'",
+  html: `
+  <div class="full center gap-lg">
+    <span class="badge badge-red">Attack 4 · The Consent</span>
+    <div style="background:#fff; border-radius:16px; padding:2.5rem; max-width:min(420px,35vw); width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+      <div style="text-align:center; margin-bottom:1.5rem;">
+        <div style="width:60px; height:60px; border-radius:50%; background:linear-gradient(135deg,#60a5fa,#3b82f6); margin:0 auto 1rem; display:flex; align-items:center; justify-content:center; font-size:1.8rem;">🌤️</div>
+        <p style="color:#111; font-size:1.2rem; font-weight:700;">WeatherMCP</p>
+        <p style="color:#666; font-size:0.85rem;">wants to connect to your MCP host</p>
+      </div>
+      <div style="background:#f5f5f5; border-radius:8px; padding:1rem; margin-bottom:1.5rem;">
+        <p style="color:#333; font-size:0.85rem; font-weight:600;">This will allow WeatherMCP to:</p>
+        <p style="color:#555; font-size:0.8rem; margin-top:0.5rem;">✓ Access MCP tools and resources</p>
+        <p style="color:#555; font-size:0.8rem;">✓ Send sampling requests</p>
+      </div>
+      <div style="display:flex; gap:0.8rem;">
+        <div style="flex:1; padding:0.7rem; border-radius:8px; border:1px solid #ddd; text-align:center; color:#666; font-weight:600; font-size:0.9rem;">Cancel</div>
+        <div style="flex:1; padding:0.7rem; border-radius:8px; background:#3b82f6; text-align:center; color:#fff; font-weight:600; font-size:0.9rem;">Allow</div>
+      </div>
+    </div>
+  </div>`
+},
+
+// ===== SLIDE 31: Attack 4 - The Question =====
+{
+  notes: "'Does the user know what they just authorized?' (Long pause.) 'That server can now call sampling/createMessage with includeContext: allServers. The host - if it's spec-compliant - hands over the full conversation history. And with million-token context windows, we are not talking about a few turns of chat. We are talking about weeks of conversation. Entire codebases. Documents. Emails. Personal notes. The industry is racing to make context windows bigger while the protocol has no mechanism to scope what a server can see within that context. We are building bigger houses with more rooms and the same single key opens all of them.'",
+  html: `
+  <div class="full center gap-lg">
+    <h2>Does the user know<br>what they just authorized?</h2>
+    <img src="img/oauth-flow-broken.svg" alt="OAuth flow with red arrow - data now flows to the server via sampling" style="width:min(90%,800px); margin-top:2vh;">
+  </div>`
+},
+
+// ===== SLIDE 32: Attack 4 - The Devastation =====
+{
+  notes: "(Let the slide speak. Quiet voice.) 'The user sees 72 degrees and sunny. The weather server now has their cardiac diagnosis, their divorce attorney meeting, and the fact that their wife doesn't know about either one.' (Beat.) 'Quite a sample.'",
+  html: `
+  <div class="full center gap-lg">
+    <img src="img/exfil-vs-weather.png" alt="Sunny weather widget vs exfiltrated medical, legal, and credential data" style="max-height:55vh; max-width:85%; object-fit:contain; border-radius:12px;">
+    <p class="red mt-2 fade-delayed" style="font-size:clamp(1.2rem,2vw,1.8rem); font-weight:700; transition-delay:2s;">Quite a "sample."</p>
+  </div>`
+},
+
+// ===== Not Theoretical =====
+{
+  notes: "'Croce and South at MIT demonstrated these attacks work with real models — GPT-4, Claude — models specifically trained to be safe. They called it 'undergraduate-level Python.' We replicated their research and built our own PoCs. Two teams, same attacks, independently. These are not theoretical.'",
+  html: `
+  <div class="split" style="width:auto;">
+    <div class="stack center">
+      <img src="img/paper-citation.svg" alt="Croce & South — Trivial Trojans" style="width:min(90%,25vw); height:min(240px,20vh);">
+
+    </div>
+    <div class="stack center">
+      <img src="img/github-repo-card.svg" alt="GitHub: clawdreyhepburn/mcp-exfil-poc" style="width:min(90%,25vw); height:min(240px,20vh);">
+
+    </div>
+  </div>`
+},
+
+// ===== Section: Recommendations =====
+{
+  notes: "'Four attacks. Now let me tell you what we recommend.'",
+  html: `
+  <div class="full center section-slide">
+    <div class="section-label center stack gap-sm">
+      <div class="progress-dots"><div class="dot done"></div><div class="dot active" style="background:#4ade80"></div><div class="dot"></div></div>
+      <h1 class="green">Recommendations</h1>
+    </div>
+  </div>`
+},
+
+// ===== Rec 1: One-Way Flow =====
+{
+  notes: "'Number one. And I want you to sit with this for a second.'",
+  html: `
+  <div class="full center">
+    <div style="display:flex; align-items:center; gap:1rem; margin-bottom:3vh;">
+      <span class="badge badge-green" style="font-size:1rem; padding:6px 16px;">1</span>
+    </div>
+    <h1 style="font-size:clamp(2.5rem,5vw,4.5rem); font-weight:800; line-height:1.15; position:relative; z-index:1;">MCP should be<br>a <span class="green">one-way street</span></h1>
+    <svg width="80%" height="40" style="position:absolute; bottom:18%; left:10%; opacity:0.15;" viewBox="0 0 800 40" preserveAspectRatio="none">
+      <path d="M0,20 L760,20 L745,8 M760,20 L745,32" stroke="#22c55e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none" class="draw-in"/>
+    </svg>
+  </div>`
+},
+
+// ===== Rec 1b: OAuth Only Protects One Direction =====
+{
+  notes: "'Here's why. Look at OAuth. OAuth was designed to protect one direction - the client calls the resource server, the resource server checks the token. That's it. The resource server never calls back to the client. It's not mTLS. The client is completely unprotected from the server. And that was fine - because in OAuth, the server just serves data. But MCP added sampling and elicitation. Now the server can call back to the client, prompt the LLM, social-engineer the user. OAuth doesn't protect that direction. Nobody does. The client is wide open.'",
+  html: `
+  <div class="full center gap-lg">
+    <h2>OAuth protects <span class="green">one direction</span></h2>
+    <img src="img/oauth-one-way.png" alt="Client to Server protected by OAuth token; Server to Client unprotected" style="max-height:50vh; max-width:85%; object-fit:contain; border-radius:12px;">
+    <p class="dim" style="font-size:clamp(0.8rem,1.1vw,1rem); margin-top:1vh;">OAuth is not mTLS.</p>
+  </div>`
+},
+
+// ===== Rec 1c: The Fix =====
+{
+  notes: "'So the fix is simple: delete the back-channel. No sampling. No elicitation. The server returns data, the client decides what to do with it. And here's the thing - if the server needs to independently verify the user's identity, OAuth already gives you that. The browser. Consent screens. Scopes. Secure, user-mediated authentication that we've been doing for fifteen years. We get that for free. We don't need to reinvent it inside the protocol. This alone kills two of the four attacks. Elicitation and memory exfil - all require the server to reach back through the client. Cut that wire and they're gone.'",
+  html: `
+  <div class="full center gap-lg">
+    <div style="display:flex; align-items:center; gap:1rem;">
+      <span class="badge badge-green" style="font-size:1rem; padding:6px 16px;">1</span>
+      <h2>One-Way Flow</h2>
+    </div>
+    <div class="stack gap-sm" style="max-width:85%; width:100%;">
+      <div style="padding:1.2rem 1.5rem; border-radius:8px; background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.25);">
+        <p><strong class="green">No sampling. No elicitation.</strong></p>
+        <p class="dim" style="font-size:0.85rem; margin-top:0.3rem;">The server should never prompt the LLM or the user</p>
+      </div>
+      <div style="padding:1.2rem 1.5rem; border-radius:8px; background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.25);">
+        <p>The <strong>client</strong> is where the user lives</p>
+        <p class="dim" style="font-size:0.85rem; margin-top:0.3rem;">More trustworthy than the server - let it intermediate</p>
+      </div>
+      <div style="padding:1.2rem 1.5rem; border-radius:8px; background:rgba(96,165,250,0.06); border:1px solid rgba(96,165,250,0.25);">
+        <p>Need to independently verify user authentication? <strong class="blue">OAuth already does that</strong></p>
+        <p class="dim" style="font-size:0.85rem; margin-top:0.3rem;">Browser · Consent screens · Scopes - secure, proven, free</p>
+      </div>
+    </div>
+    <div style="display:flex; gap:0.8rem; margin-top:2vh; flex-wrap:wrap; justify-content:center;">
+      <span style="padding:0.5rem 1rem; border-radius:8px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); font-size:0.85rem;"><span class="green">✓</span> Solves Attack 2 - elicitation</span>
+
+      <span style="padding:0.5rem 1rem; border-radius:8px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); font-size:0.85rem;"><span class="green">✓</span> Solves Attack 4 - memory exfil</span>
+    </div>
+  </div>`
+},
+
+// ===== Rec 2: Signed Server Metadata =====
+{
+  notes: "'Recommendation two. Signed server metadata. CIMD gave us client identity - the host can verify who's connecting. We need the same thing for servers. Signed manifests that pin tool definitions, versions, and publisher identity. If a tool set changes, the client knows. If a server claims to be a weather service but exposes 80 tools including delete_repository, the signature doesn't match the manifest. This is how you stop attack one - the supply chain attack. The malicious server can't hide what it really is.'",
+  html: `
+  <div class="full center gap-lg">
+    <div style="display:flex; align-items:center; gap:1rem;">
+      <span class="badge badge-green" style="font-size:1rem; padding:6px 16px;">2</span>
+      <h2>Signed Server Metadata</h2>
+    </div>
+    <div class="split" style="max-width:85%">
+      <div class="stack gap-sm" style="flex:1;">
+        <img src="img/signed-document.png" alt="Signed server manifest" style="max-height:28vh; object-fit:contain; border-radius:8px;">
+        <p class="dim" style="font-size:0.85rem; text-align:center;">CIMD solved client → server. Now do it for servers.</p>
+      </div>
+      <div class="stack gap-sm" style="flex:1;">
+        <ul class="check-list">
+          <li>Pin tool definitions + versions</li>
+          <li>Sign with publisher identity</li>
+          <li>Changes = re-authorization</li>
+        </ul>
+        <div style="padding:0.8rem 1.2rem; border-radius:8px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.2); margin-top:0.5rem;">
+          <p style="font-size:0.85rem;">"WeatherMCP" manifest: 3 tools → Actual: <span class="red">80 tools</span></p>
+          <p class="red" style="font-size:0.85rem; margin-top:0.3rem;">✗ Signature mismatch</p>
+        </div>
+        <span style="padding:0.5rem 1rem; border-radius:8px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); font-size:0.85rem;"><span class="green">✓</span> Solves Attack 1 — silent tool injection</span>
+      </div>
+    </div>
+  </div>`
+},
+
+// ===== Rec 2b: Signed Metadata - Code =====
+{
+  notes: "'Here's what this looks like concretely. The server publishes a manifest - JSON, signed by the publisher. Lists every tool, the version, a content hash. The client checks this on connect and on every toolsListChanged notification. If the hash doesn't match, the client blocks the change and asks the user. This is the same pattern as package-lock.json or Subresource Integrity - pin what you approved, reject what you didn't.'",
+  html: `
+  <div class="full center gap-lg">
+    <div style="display:flex; align-items:center; gap:1rem;">
+      <span class="badge badge-green" style="font-size:1rem; padding:6px 16px;">2</span>
+      <h2 style="font-size:clamp(1.2rem,2.2vw,1.8rem);">Signed Server Metadata</h2>
+    </div>
+    <div style="max-width:85%; width:100%; background:var(--terminal-bg); border:1px solid var(--terminal-border); border-radius:8px; padding:1.5rem; overflow-x:auto;">
+      <pre style="margin:0; font-family:'JetBrains Mono',monospace; font-size:clamp(0.7rem,1.1vw,0.95rem); line-height:1.5; color:var(--text);"><code>{
+  <span style="color:var(--blue);">"server"</span>: <span style="color:var(--green);">"weather-mcp"</span>,
+  <span style="color:var(--blue);">"version"</span>: <span style="color:var(--green);">"1.2.0"</span>,
+  <span style="color:var(--blue);">"publisher"</span>: <span style="color:var(--green);">"acme-corp"</span>,
+  <span style="color:var(--blue);">"tools"</span>: [
+    { <span style="color:var(--blue);">"name"</span>: <span style="color:var(--green);">"get_forecast"</span>, <span style="color:var(--blue);">"hash"</span>: <span style="color:var(--green);">"sha256:a1b2c3..."</span> },
+    { <span style="color:var(--blue);">"name"</span>: <span style="color:var(--green);">"get_alerts"</span>,   <span style="color:var(--blue);">"hash"</span>: <span style="color:var(--green);">"sha256:d4e5f6..."</span> }
+  ],
+  <span style="color:var(--blue);">"signature"</span>: <span style="color:var(--green);">"eyJhbGciOiJFZDI1NTE5In0..."</span>
+}</code></pre>
+    </div>
+    <p class="dim" style="font-size:clamp(0.75rem,1vw,0.9rem); margin-top:1vh;">Client pins on connect · Rejects unsigned <code style="background:var(--code-bg); padding:2px 6px; border-radius:4px;">toolsListChanged</code></p>
+  </div>`
+},
+
+// ===== Rec 3: RAR as First-Class Citizen =====
+{
+  notes: "'Recommendation three. And here's the good news. We already solved this. The identity community already built the tools for constraining what sub-agents can do. It's called Rich Authorization Requests - RFC 9396. The authorization_details claim in an OAuth token carries structured, fine-grained permissions. Not just flat scopes like jira:read - actual policies describing what actions on what resources. When The Cat spawns Little Cat A, it does a token exchange with the AS and gets a new token with narrower authorization_details. The Jira server checks the token - standard OAuth validation - and reads the authorization_details to see if this action is covered. No new token types. No new fields on tool calls. Just OAuth, used properly. The only thing MCP needs to do is make this a first-class concept: let servers declare authorizationDetailsRequired as a capability, so they can require these constrained tokens from sub-agents.'",
+  html: `
+  <div class="full center gap-lg">
+    <div style="display:flex; align-items:center; gap:1rem;">
+      <span class="badge badge-green" style="font-size:1rem; padding:6px 16px;">3</span>
+      <h2>Allow Enforcement of Fine-Grained Policies</h2>
+    </div>
+    <img src="img/toolbox.png" alt="Toolbox with OAuth 2.1, Token Exchange, RAR, Cedar — you already have everything you need" style="max-height:40vh; max-width:70%; object-fit:contain; border-radius:12px;">
+    <div class="stack gap-sm" style="max-width:85%; width:100%;">
+      <div style="padding:1rem 1.5rem; border-radius:8px; background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.25);">
+        <p><strong class="green">Rich Authorization Requests</strong> — RFC 9396</p>
+        <p class="dim" style="font-size:0.85rem; margin-top:0.3rem;"><code style="background:var(--code-bg); padding:2px 6px; border-radius:4px;">authorization_details</code> · structured policies · what actions, on what resources, for how long</p>
+      </div>
+    </div>
+    <div style="display:flex; gap:0.8rem; margin-top:1vh; flex-wrap:wrap; justify-content:center;">
+      <span style="padding:0.5rem 1rem; border-radius:8px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3); font-size:0.85rem;"><span class="green">✓</span> Solves Attack 3 — uncontrolled delegation</span>
+    </div>
+  </div>`
+},
+
+// ===== Rec 3b: RAR - Code =====
+{
+  notes: "'Here's what the token looks like. Standard OAuth access token. The authorization_details claim carries the constraint - Little Cat A can update the title attribute in Okta - that's the support ticket workflow. The server validates the OAuth token normally, then reads authorization_details and checks: does this cover the tool call you're making? Update title? That's in the policy. Reconfigure security settings? Not in the policy. Standard AS, standard token, standard validation. The only new thing is MCP saying: servers, look at this claim.'",
+  html: `
+  <div class="full center gap-lg">
+    <div style="display:flex; align-items:center; gap:1rem;">
+      <span class="badge badge-green" style="font-size:1rem; padding:6px 16px;">3</span>
+      <h2 style="font-size:clamp(1.2rem,2.2vw,1.8rem);">authorization_details</h2>
+    </div>
+    <div style="max-width:85%; width:100%; background:var(--terminal-bg); border:1px solid var(--terminal-border); border-radius:8px; padding:1.5rem; overflow-x:auto;">
+      <pre style="margin:0; font-family:'JetBrains Mono',monospace; font-size:clamp(0.7rem,1.1vw,0.95rem); line-height:1.5; color:var(--text);"><code><span style="color:var(--text-dim);">// OAuth token for Little Cat A (via token exchange)</span>
+{
+  <span style="color:var(--blue);">"iss"</span>: <span style="color:var(--green);">"https://as.example.com"</span>,
+  <span style="color:var(--blue);">"sub"</span>: <span style="color:var(--green);">"little-cat-a"</span>,
+  <span style="color:var(--blue);">"authorization_details"</span>: [{
+    <span style="color:var(--blue);">"type"</span>: <span style="color:var(--green);">"agent_mandate"</span>,
+    <span style="color:var(--blue);">"rarFormat"</span>: <span style="color:var(--green);">"cedar"</span>,
+    <span style="color:var(--blue);">"policySet"</span>: <span style="color:var(--green);">"permit(\n      principal,\n      action == Okta::Action::\"update_attribute\",\n      resource == Okta::UserAttr::\"title\"\n    );"</span>
+  }],
+  <span style="color:var(--blue);">"exp"</span>: <span style="color:var(--yellow);">1712200800</span>
+}</code></pre>
+    </div>
+    <p class="dim" style="font-size:clamp(0.75rem,1vw,0.9rem); margin-top:1vh;">Standard OAuth token · Standard AS · Standard validation<br>MCP just needs to say: <strong>servers, check this claim</strong></p>
+  </div>`
+},
+
+// ===== Rec 3c: The MCP Change =====
+{
+  notes: "'So what's the actual spec change? One new server capability: authorizationDetailsRequired. A server declares it during initialization. The client knows: this server requires constrained tokens. When The Cat spawns Little Cat A, the client does a token exchange with the authorization server and gets a narrower token — one that only covers what Little Cat A is supposed to do. The server checks the authorization_details on every tool call. If the action isn't covered, it doesn't just fail — it escalates. That's rec four. But the key insight is: MCP doesn't need to invent anything. It just needs to say: servers, you can require this.'",
+  html: `
+  <div class="full center gap-lg">
+    <div style="display:flex; align-items:center; gap:1rem;">
+      <span class="badge badge-green" style="font-size:1rem; padding:6px 16px;">3</span>
+      <h2>The spec change</h2>
+    </div>
+    <div style="max-width:85%; width:100%; background:var(--terminal-bg); border:1px solid var(--terminal-border); border-radius:8px; padding:1.5rem; overflow-x:auto;">
+      <pre style="margin:0; font-family:'JetBrains Mono',monospace; font-size:clamp(0.8rem,1.2vw,1rem); line-height:1.6; color:var(--text);"><code><span style="color:var(--text-dim);">// Server declares during initialize</span>
+{
+  <span style="color:var(--blue);">"capabilities"</span>: {
+    <span style="color:var(--blue);">"authorizationDetailsRequired"</span>: <span style="color:var(--yellow);">true</span>
+  }
+}</code></pre>
+    </div>
+    <div class="stack gap-sm" style="max-width:85%; width:100%; margin-top:1vh;">
+      <p style="font-size:clamp(0.9rem,1.2vw,1.1rem);"><span class="green">→</span> Client knows: this server requires constrained tokens</p>
+      <p style="font-size:clamp(0.9rem,1.2vw,1.1rem);"><span class="green">→</span> Sub-agents get narrowed tokens via token exchange</p>
+      <p style="font-size:clamp(0.9rem,1.2vw,1.1rem);"><span class="green">→</span> Server checks <code style="background:var(--code-bg); padding:2px 6px; border-radius:4px;">authorization_details</code> on every tool call</p>
+    </div>
+  </div>`
+},
+
+// ===== Rec 4: Escalate — Build 1 (Allow + Deny) =====
+{
+  notes: "'Recommendation four. So the server checks authorization_details and the action isn't covered. What happens? Today, MCP has two responses to a tool call: success or error. If the action isn't in the authorization_details, you get a generic error. The client has no idea why. Was the tool broken? Was there a bug? Was the agent doing something it shouldn't? You can't tell.'",
+  html: `
+  <div class="full center gap-lg">
+    <div style="display:flex; align-items:center; gap:1rem;">
+      <span class="badge badge-green" style="font-size:1rem; padding:6px 16px;">4</span>
+      <h2>Escalate</h2>
+    </div>
+    <div class="stack" style="max-width:85%; width:100%; gap:0.6rem;">
+      <div style="padding:1rem 1.5rem; border-radius:8px; background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.25); display:flex; align-items:center; gap:1.2rem;">
+        <span style="font-size:1.3rem; min-width:1.8rem; text-align:center;">✅</span>
+        <strong class="green" style="font-size:1.1rem; min-width:5.5rem;">Allow</strong>
+        <p class="dim" style="font-size:0.9rem; margin:0;">Token valid · <code style="background:var(--code-bg); padding:2px 6px; border-radius:4px;">authorization_details</code> covers this action</p>
+      </div>
+      <div style="padding:1rem 1.5rem; border-radius:8px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.25); display:flex; align-items:center; gap:1.2rem;">
+        <span style="font-size:1.3rem; min-width:1.8rem; text-align:center;">🚫</span>
+        <strong class="red" style="font-size:1.1rem; min-width:5.5rem;">Deny</strong>
+        <p class="dim" style="font-size:0.9rem; margin:0;">Token invalid or expired · Hard stop</p>
+      </div>
+    </div>
+  </div>`
+},
+
+// ===== Rec 4: Escalate — Build 2 (+ Escalate + Tell Mom) =====
+{
+  notes: "'We need a third response: escalate. The server says: your token is valid, I trust who you are, but this action is not in your authorization_details. And here's what was attempted. Think of it this way: I send my kid out to be a crossing guard and the school calls me to say he's selling Pokemon cards on the corner. I don't want them to just say no and send him home — I want to know. Escalate sends it back up the chain to the parent with context: what tool call was attempted, why it was denied. Maybe the authorization_details were too narrow. Maybe the LLM went off-task. Maybe it's prompt injection. Either way, the parent needs to know. And it's safe — information only flows toward the client, the trusted side.'",
+  html: `
+  <div class="full center gap-lg">
+    <div style="display:flex; align-items:center; gap:1rem;">
+      <span class="badge badge-green" style="font-size:1rem; padding:6px 16px;">4</span>
+      <h2>Escalate</h2>
+    </div>
+    <div class="stack" style="max-width:85%; width:100%; gap:0.6rem;">
+      <div style="padding:1rem 1.5rem; border-radius:8px; background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.25); display:flex; align-items:center; gap:1.2rem;">
+        <span style="font-size:1.3rem; min-width:1.8rem; text-align:center;">✅</span>
+        <strong class="green" style="font-size:1.1rem; min-width:5.5rem;">Allow</strong>
+        <p class="dim" style="font-size:0.9rem; margin:0;">Token valid · <code style="background:var(--code-bg); padding:2px 6px; border-radius:4px;">authorization_details</code> covers this action</p>
+      </div>
+      <div style="padding:1rem 1.5rem; border-radius:8px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.25); display:flex; align-items:center; gap:1.2rem;">
+        <span style="font-size:1.3rem; min-width:1.8rem; text-align:center;">🚫</span>
+        <strong class="red" style="font-size:1.1rem; min-width:5.5rem;">Deny</strong>
+        <p class="dim" style="font-size:0.9rem; margin:0;">Token invalid or expired · Hard stop</p>
+      </div>
+      <div class="slide-in-right" style="padding:1rem 1.5rem; border-radius:8px; background:rgba(250,204,21,0.06); border:1px solid rgba(250,204,21,0.25); display:flex; align-items:center; gap:1.2rem;">
+        <span style="font-size:1.3rem; min-width:1.8rem; text-align:center;">⬆️</span>
+        <strong class="yellow" style="font-size:1.1rem; min-width:5.5rem;">Escalate</strong>
+        <p class="dim" style="font-size:0.9rem; margin:0;">Token valid · Action not covered · Tell the parent what was attempted</p>
+      </div>
+    </div>
+    <p class="dim fade-delayed" style="font-size:clamp(0.75rem,1vw,0.9rem); margin-top:2vh; max-width:75%; text-align:center; transition-delay:0.8s;">Don't just say no — <strong class="yellow">tell mom</strong>.</p>
+  </div>`
+},
+
+// ===== What We're Asking MCP To Change =====
+{
+  notes: "'So what are we actually asking the MCP spec to do? Four concrete changes. One — remove sampling and elicitation from the spec entirely. Servers should not be able to prompt the LLM or social-engineer the user. Two — add signed server metadata. Manifests with tool definitions, versions, and publisher identity. Clients pin on connect and reject unsigned changes. Three — add an authorizationDetailsRequired server capability so servers can require constrained tokens from sub-agents. And four — add escalate as a third tool call response alongside success and error. These aren't aspirational. These are pull requests.'",
+  html: `
+  <div class="full center gap-lg">
+    <h2>What we want MCP to change</h2>
+    <div class="stack stagger" style="max-width:60vw; width:100%; gap:1rem; margin:0 auto;">
+      <div style="display:flex; align-items:center; gap:1.2rem; padding:1rem 1.5rem; border-radius:8px; background:var(--surface); border:1px solid var(--border);">
+        <span class="badge badge-red" style="min-width:32px; text-align:center; font-size:1rem;">1</span>
+        <div>
+          <p style="font-size:clamp(1rem,1.4vw,1.3rem); font-weight:600;">Remove <code>sampling</code> and <code>elicitation</code></p>
+          <p class="dim" style="font-size:0.85rem; margin-top:0.3rem;">Servers must not prompt the LLM or social-engineer the user</p>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:1.2rem; padding:1rem 1.5rem; border-radius:8px; background:var(--surface); border:1px solid var(--border);">
+        <span class="badge badge-green" style="min-width:32px; text-align:center; font-size:1rem;">2</span>
+        <div>
+          <p style="font-size:clamp(1rem,1.4vw,1.3rem); font-weight:600;">Add signed server metadata</p>
+          <p class="dim" style="font-size:0.85rem; margin-top:0.3rem;">Pin tool definitions · Reject unsigned <code>toolsListChanged</code></p>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:1.2rem; padding:1rem 1.5rem; border-radius:8px; background:var(--surface); border:1px solid var(--border);">
+        <span class="badge badge-green" style="min-width:32px; text-align:center; font-size:1rem;">3</span>
+        <div>
+          <p style="font-size:clamp(1rem,1.4vw,1.3rem); font-weight:600;">Add <code>authorizationDetailsRequired</code> capability</p>
+          <p class="dim" style="font-size:0.85rem; margin-top:0.3rem;">Servers can require constrained tokens from sub-agents</p>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:1.2rem; padding:1rem 1.5rem; border-radius:8px; background:var(--surface); border:1px solid var(--border);">
+        <span class="badge badge-yellow" style="min-width:32px; text-align:center; font-size:1rem;">4</span>
+        <div>
+          <p style="font-size:clamp(1rem,1.4vw,1.3rem); font-weight:600;">Add <code>escalate</code> as a third tool response</p>
+          <p class="dim" style="font-size:0.85rem; margin-top:0.3rem;">Alongside <code>success</code> and <code>error</code> — tell the parent what was attempted</p>
+        </div>
+      </div>
+    </div>
+  </div>`
+},
+
+// ===== SLIDE 58: Summary =====
+{
+  notes: "\"Quick recap - four attacks, four recommendations. Let me walk through each one.\"",
+  html: `
+  <div class="full center gap-lg">
+    <h2>Summary</h2>
+    <div style="display:flex; gap:2rem; justify-content:center; flex-wrap:wrap;">
+      <table style="border-collapse:separate; border-spacing:0 0.6rem; width:100%; max-width:65vw;">
+        <tr>
+          <td style="padding:0.8rem 1.2rem; border-radius:8px 0 0 8px; background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.25); border-right:none; min-width:45%; font-size:clamp(1rem,1.4vw,1.3rem);">
+            <span class="red" style="font-weight:700;">1.</span> Silent tool injection
+          </td>
+          <td style="padding:0.8rem; text-align:center; color:var(--text-dim); font-size:1.2rem;">→</td>
+          <td style="padding:0.8rem 1.2rem; border-radius:0 8px 8px 0; background:rgba(34,197,94,0.05); border:1px solid rgba(34,197,94,0.25); border-left:none; font-size:clamp(1rem,1.4vw,1.3rem);">
+            <span class="green" style="font-weight:700;">Signed server metadata</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0.8rem 1.2rem; border-radius:8px 0 0 8px; background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.25); border-right:none; font-size:clamp(1rem,1.4vw,1.3rem);">
+            <span class="red" style="font-weight:700;">2.</span> Malicious elicitation
+          </td>
+          <td style="padding:0.8rem; text-align:center; color:var(--text-dim); font-size:1.2rem;">→</td>
+          <td style="padding:0.8rem 1.2rem; border-radius:0 8px 8px 0; background:rgba(34,197,94,0.05); border:1px solid rgba(34,197,94,0.25); border-left:none; font-size:clamp(1rem,1.4vw,1.3rem);">
+            <span class="green" style="font-weight:700;">One-way flow</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0.8rem 1.2rem; border-radius:8px 0 0 8px; background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.25); border-right:none; font-size:clamp(1rem,1.4vw,1.3rem);">
+            <span class="red" style="font-weight:700;">3.</span> Uncontrolled delegation
+          </td>
+          <td style="padding:0.8rem; text-align:center; color:var(--text-dim); font-size:1.2rem;">→</td>
+          <td style="padding:0.8rem 1.2rem; border-radius:0 8px 8px 0; background:rgba(34,197,94,0.05); border:1px solid rgba(34,197,94,0.25); border-left:none; font-size:clamp(1rem,1.4vw,1.3rem);">
+            <span class="green" style="font-weight:700;">authorization_details + Escalate</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0.8rem 1.2rem; border-radius:8px 0 0 8px; background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.25); border-right:none; font-size:clamp(1rem,1.4vw,1.3rem);">
+            <span class="red" style="font-weight:700;">4.</span> Chat history exfiltration
+          </td>
+          <td style="padding:0.8rem; text-align:center; color:var(--text-dim); font-size:1.2rem;">→</td>
+          <td style="padding:0.8rem 1.2rem; border-radius:0 8px 8px 0; background:rgba(34,197,94,0.05); border:1px solid rgba(34,197,94,0.25); border-left:none; font-size:clamp(1rem,1.4vw,1.3rem);">
+            <span class="green" style="font-weight:700;">One-way flow</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>`
+},
+
+// ===== SLIDE 59: Call to Action =====
+{
+  notes: "'Three things you can do this week. One - join the community group. This is where the threat modeling subgroup lives, where these recommendations are being developed, where you can shape what happens next. Two - go home and tell your agent to play with Cedar. Seriously. Have it write policies for its own sub-agents. It's fun, and you'll learn more in an afternoon than reading any spec. Three - read Solving the Bottom Turtle for the full depth on the sub-agent delegation problem. We only scratched the surface today.'",
+  html: `
+  <div class="full center gap-lg">
+    <h2>What you can do this week</h2>
+    <div class="stack stagger" style="max-width:85%; width:100%; gap:1.2rem;">
+      <div style="display:flex; align-items:center; gap:1.2rem; padding:1.2rem 1.8rem; border-radius:8px; background:var(--surface); border:1px solid var(--border);">
+        <span class="badge badge-green" style="min-width:32px; text-align:center; font-size:1.1rem;">1</span>
+        <p style="font-size:clamp(1.1rem,1.5vw,1.4rem);"><strong>Join the OIDF AI Identity Management CG</strong></p>
+      </div>
+      <div style="display:flex; align-items:center; gap:1.2rem; padding:1.2rem 1.8rem; border-radius:8px; background:var(--surface); border:1px solid var(--border);">
+        <span class="badge badge-blue" style="min-width:32px; text-align:center; font-size:1.1rem;">2</span>
+        <p style="font-size:clamp(1.1rem,1.5vw,1.4rem);"><strong>Tell your agent to go play with Cedar (or OPA or Oso or Zanzibar or...)</strong></p>
+      </div>
+      <div style="display:flex; align-items:center; gap:1.2rem; padding:1.2rem 1.8rem; border-radius:8px; background:var(--surface); border:1px solid var(--border);">
+        <span class="badge badge-purple" style="min-width:32px; text-align:center; font-size:1.1rem;">3</span>
+        <p style="font-size:clamp(1.1rem,1.5vw,1.4rem);"><strong>Read "Solving the Bottom Turtle"</strong></p>
+      </div>
+    </div>
+  </div>`
+},
+
+// ===== SLIDE 60: Closing =====
+{
+  notes: "Handoff to Emily. 'Stay for Emily's talk - she covers what happens when authentication itself gets confused.' Thank the audience.",
+  html: `
+  <div class="full center gap-lg grid-bg">
+    <h2>Thank you</h2>
+    <div class="stack center gap-sm">
+      <p>Sarah Cecchetti · <span class="accent">@Sarah_Cecc</span></p>
+      <p class="dim">Chair, Threat Modeling Subgroup · OIDF AI Identity Management CG</p>
+    </div>
+    <div class="stack gap-sm" style="max-width:85%; width:100%; margin-top:2vh;">
+      <div class="cta-card" style="text-align:center;">
+        <p class="mono" style="font-size:0.8rem;">PoC: <span class="accent">github.com/clawdreyhepburn/mcp-exfil-poc</span></p>
+      </div>
+      <div class="cta-card" style="text-align:center;">
+        <p class="mono" style="font-size:0.8rem;">Threat model: <span class="accent">clawdrey.com/drafts/mcp-identity-threat-model.html</span></p>
+      </div>
+      <div class="cta-card" style="text-align:center;">
+        <p class="mono" style="font-size:0.8rem;">OVID (delegation): <span class="accent">github.com/clawdreyhepburn/ovid</span></p>
+      </div>
+    </div>
+    <div class="img-placeholder img-purple shape-pill" style="width:min(80%,500px); min-height:50px; margin-top:2vh;">
+      <span>Up next: Emily Lauber (Microsoft) - Mix-Up Attacks in MCP</span>
+    </div>
+  </div>`
+},
+
+]; // end slides
+
+// ============ ENGINE ============
+let current = Math.max(0, (parseInt(location.hash.replace('#',''),10) || 1) - 1);
+let notesVisible = false;
+const deck = document.getElementById('deck');
+
+function render() {
+  deck.innerHTML = '';
+  slides.forEach((s, i) => {
+    const div = document.createElement('div');
+    div.className = 'slide' + (i === current ? ' active' : '');
+    div.innerHTML = s.html;
+    deck.appendChild(div);
+  });
+  document.getElementById('slideCounter').textContent = `${current + 1} / ${slides.length}`;
+  document.getElementById('progressBar').style.width = `${((current + 1) / slides.length) * 100}%`;
+  document.getElementById('notesContent').textContent = slides[current].notes || '';
+  history.replaceState(null, '', '#' + (current + 1));
+  // Trigger animations on the active slide after a frame
+  requestAnimationFrame(() => {
+    const active = deck.querySelector('.slide.active');
+    if (active) {
+      active.querySelectorAll('.cascade, .stagger').forEach(el => el.classList.add('animate'));
+      active.querySelectorAll('.fade-delayed').forEach(el => el.classList.add('animate'));
+      active.querySelectorAll('.draw-in').forEach(el => el.classList.add('animate'));
+    }
+  });
+}
+
+function next() { if (current < slides.length - 1) { current++; render(); } }
+function prev() { if (current > 0) { current--; render(); } }
+function goTo(n) { current = Math.max(0, Math.min(n, slides.length - 1)); render(); }
+function toggleNotes() {
+  notesVisible = !notesVisible;
+  document.getElementById('notesPanel').classList.toggle('visible', notesVisible);
+}
+function toggleFullscreen() {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+  else document.exitFullscreen();
+}
+function toggleTheme() {
+  document.documentElement.classList.toggle('light');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); next(); }
+  if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev(); }
+  if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+  if (e.key === 'End') { e.preventDefault(); goTo(slides.length - 1); }
+  if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+  if (e.key === 'n' || e.key === 'N') toggleNotes();
+  if (e.key === 'l' || e.key === 'L') toggleTheme();
+  if (e.key === 'Escape' && notesVisible) toggleNotes();
+});
+
+// Touch/swipe support
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+document.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  if (Math.abs(dx) > 50) { dx < 0 ? next() : prev(); }
+});
+
+window.addEventListener('hashchange', () => {
+  const n = parseInt(location.hash.replace('#',''),10) - 1;
+  if (!isNaN(n) && n !== current) { current = Math.max(0, Math.min(n, slides.length - 1)); render(); }
+});
+render();
+</script>
+</body>
+</html>
